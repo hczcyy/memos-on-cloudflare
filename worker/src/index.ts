@@ -13,7 +13,7 @@ import { shortcutRoutes } from "./routes/shortcuts";
 import { idpRoutes } from "./routes/idp";
 import { aiRoutes } from "./routes/ai";
 import { sseRoutes } from "./routes/sse";
-import { rssRoutes } from "./routes/rss";
+import { exploreRssRoutes, rssRoutes } from "./routes/rss";
 import { findUserById } from "./db/user";
 import { formatUser } from "./routes/users";
 
@@ -48,6 +48,7 @@ app.route("/file", fileRoutes);
 app.get("/u/:username", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.get("/u/:username/", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.route("/u", rssRoutes);
+app.route("/explore", exploreRssRoutes);
 
 app.notFound((c) => {
   return c.json({ code: 5, message: "Not Found", details: [] }, 404);

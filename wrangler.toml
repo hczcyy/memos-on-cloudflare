@@ -6,7 +6,7 @@ compatibility_date = "2025-05-01"
 directory = "./web/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/file/*", "/u/*"]
+run_worker_first = ["/api/*", "/file/*", "/u/*", "/explore/rss.xml"]
 
 [vars]
 INSTANCE_NAME = "cfmemos"
