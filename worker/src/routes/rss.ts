@@ -39,8 +39,8 @@ function getMemoTitle(content: string): string {
   if (!title) return "Untitled";
   
   // 安全截断，避免破坏 emoji 等特殊字符
-  if (title.length > 100) {
-    const truncated = title.slice(0, 100);
+  if (title.length > 30) {
+    const truncated = title.slice(0, 30);
     // 检查最后一个字符是否是代理对的一部分（emoji 等）
     if (/[\uD800-\uDBFF]/.test(truncated.slice(-1))) {
       return truncated.slice(0, -1);
