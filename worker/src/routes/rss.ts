@@ -270,7 +270,7 @@ exploreRssRoutes.get("/rss.xml", async (c) => {
   <channel>
     <title>${escapeXml(instanceName)} - 探索</title>
     <link>${baseUrl}/explore</link>
-    <description>来自所有用户的公开备忘录</description>
+    <description>记录工作中的点点滴滴</description>
     <language>zh-CN</language>
     <lastBuildDate>${now}</lastBuildDate>
     <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
