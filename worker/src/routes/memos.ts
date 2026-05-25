@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { Env, UserPayload } from "../types";
 import { authRequired, authOptional } from "../middleware/auth";
 import * as memoDB from "../db/memo";
@@ -8,8 +8,11 @@ import * as shareDB from "../db/share";
 import * as settingDB from "../db/setting";
 import { createErrorBody } from "../error";
 import { deleteCachedKeys, getCachedJson, putCachedJson, sha256Hex } from "../cache";
+import { buildMemoFilterWhere, MemoFilterError } from "../filter/memo-filter";
+import { deliverMemoWebhookEvent, getWebhookActor, type MemoWebhookEventType } from "../webhook";
 
 type MemoApp = { Bindings: Env; Variables: { user: UserPayload } };
+type MemoContext = Context<MemoApp>;
 
 export const memoRoutes = new Hono<MemoApp>();
 
@@ -431,6 +434,24 @@ async function invalidateMemoDerivedCaches(cache: KVNamespace | undefined, usern
   await deleteCachedKeys(cache, keys);
 }
 
+function enqueueMemoWebhook(
+  c: MemoContext,
+  eventType: MemoWebhookEventType,
+  creatorId: number,
+  memo: unknown,
+  actor: UserPayload,
+) {
+  c.executionCtx.waitUntil(
+    deliverMemoWebhookEvent({
+      db: c.env.DB,
+      creatorId,
+      eventType,
+      memo,
+      actor: getWebhookActor(actor),
+    }),
+  );
+}
+
 function getAttachmentReference(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -558,7 +579,9 @@ memoRoutes.post("/", authRequired, async (c) => {
   }
 
   await invalidateMemoDerivedCaches(c.env.CACHE, [user.username]);
-  return c.json(await enrichMemo(c.env.DB, memo, user.username, user), 201);
+  const enrichedMemo = await enrichMemo(c.env.DB, memo, user.username, user);
+  enqueueMemoWebhook(c, "memo.created", memo.creator_id, enrichedMemo, user);
+  return c.json(enrichedMemo, 201);
 });
 
 // List memos
@@ -585,38 +608,21 @@ memoRoutes.get("/", authOptional, async (c) => {
     excludeComments: true,
   };
 
-  // Parse filter string (simplified CEL-like: key == "value" && key2 == "value2")
   if (filter) {
-    const creatorMatch = filter.match(/creator_id\s*==\s*(\d+)/);
-    if (creatorMatch) opts.creatorId = Number(creatorMatch[1]);
-
-    const creatorNameMatch = filter.match(/creator\s*==\s*"users\/([^"]+)"/);
-    if (creatorNameMatch) {
-      const { findUserByUsername } = await import("../db/user");
-      const creatorUser = await findUserByUsername(c.env.DB, creatorNameMatch[1]);
-      if (creatorUser) opts.creatorId = creatorUser.id;
+    try {
+      const compiledFilter = await buildMemoFilterWhere(c.env.DB, filter);
+      opts.filterWhere = compiledFilter.sql;
+      opts.filterParams = compiledFilter.params;
+    } catch (error) {
+      const message = error instanceof MemoFilterError ? error.message : "Invalid memo filter";
+      return c.json(
+        createErrorBody(message, {
+          errorKey: "message.invalid-memo-filter",
+          errorParams: { filter },
+        }),
+        400,
+      );
     }
-
-    const visMatch = filter.match(/visibility\s*==\s*"?(\w+)"?/);
-    if (visMatch) opts.visibility = visMatch[1];
-    const visInMatch = filter.match(/visibility\s+in\s*\[([^\]]+)\]/);
-    if (visInMatch) opts.visibilities = visInMatch[1].match(/\w+/g) || [];
-
-    const contentMatch = filter.match(/content\.contains\(("(?:[^"\\]|\\.)*")\)/);
-    if (contentMatch) opts.contentSearch = JSON.parse(contentMatch[1]);
-
-    const tagMatch = filter.match(/tag\s*(?:==\s*"([^"]+)"|in\s*\["([^"]+)"\])/);
-    if (tagMatch) opts.tagSearch = tagMatch[1] || tagMatch[2];
-
-    const pinnedMatch = filter.match(/pinned\s*==\s*(true|false)/);
-    if (pinnedMatch) opts.pinned = pinnedMatch[1] === "true";
-    else if (/\bpinned\b/.test(filter) && !filter.includes("pinned ==")) opts.pinned = true;
-
-    const createdAfterMatch = filter.match(/created_ts\s*>=\s*(\d+(?:\.\d+)?)/);
-    if (createdAfterMatch) opts.createdTsAfter = Math.floor(Number(createdAfterMatch[1]));
-
-    const createdBeforeMatch = filter.match(/created_ts\s*<\s*(\d+(?:\.\d+)?)/);
-    if (createdBeforeMatch) opts.createdTsBefore = Math.floor(Number(createdBeforeMatch[1]));
   }
 
   if (!user) {
@@ -721,7 +727,9 @@ memoRoutes.patch("/:id", authRequired, async (c) => {
 
   const creatorName = updated.creator_id === user.id ? user.username : (await c.env.DB.prepare("SELECT username FROM user WHERE id = ?").bind(updated.creator_id).first<{ username: string }>())?.username;
   await invalidateMemoDerivedCaches(c.env.CACHE, [creatorName]);
-  return c.json(await enrichMemo(c.env.DB, updated, creatorName, user));
+  const enrichedMemo = await enrichMemo(c.env.DB, updated, creatorName, user);
+  enqueueMemoWebhook(c, "memo.updated", updated.creator_id, enrichedMemo, user);
+  return c.json(enrichedMemo);
 });
 
 // Delete memo
@@ -744,8 +752,10 @@ memoRoutes.delete("/:id", authRequired, async (c) => {
   }
 
   const creatorName = memo.creator_id === user.id ? user.username : (await c.env.DB.prepare("SELECT username FROM user WHERE id = ?").bind(memo.creator_id).first<{ username: string }>())?.username;
+  const deletedMemo = await enrichMemo(c.env.DB, memo, creatorName, user);
   await memoDB.deleteMemo(c.env.DB, memo.id);
   await invalidateMemoDerivedCaches(c.env.CACHE, [creatorName]);
+  enqueueMemoWebhook(c, "memo.deleted", memo.creator_id, deletedMemo, user);
   return c.json({});
 });
 
@@ -846,7 +856,9 @@ memoRoutes.post("/:id/comments", authRequired, async (c) => {
   }
 
   await invalidateMemoDerivedCaches(c.env.CACHE, [user.username]);
-  return c.json(await enrichMemo(c.env.DB, comment, user.username, user), 201);
+  const enrichedComment = await enrichMemo(c.env.DB, comment, user.username, user);
+  enqueueMemoWebhook(c, "memo.created", comment.creator_id, enrichedComment, user);
+  return c.json(enrichedComment, 201);
 });
 
 memoRoutes.get("/:id/comments", authOptional, async (c) => {

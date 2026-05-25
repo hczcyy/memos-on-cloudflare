@@ -19,7 +19,8 @@ const getVisibilityName = (visibility: Visibility): string => {
 
 const getShortcutId = (name: string): string => {
   const parts = name.split("/");
-  return parts.length === 4 ? parts[3] : "";
+  const index = parts.lastIndexOf("shortcuts");
+  return index >= 0 ? parts[index + 1] || "" : "";
 };
 
 const escapeFilterValue = (value: string): string => JSON.stringify(value);

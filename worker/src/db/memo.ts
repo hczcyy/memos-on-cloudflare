@@ -22,6 +22,8 @@ export interface ListMemosOpts {
   tagSearch?: string;
   createdTsAfter?: number;
   createdTsBefore?: number;
+  filterWhere?: string;
+  filterParams?: (string | number)[];
   pageSize?: number;
   offset?: number;
   orderBy?: string;
@@ -120,6 +122,10 @@ export async function listMemos(
   if (opts.createdTsBefore !== undefined) {
     conditions.push("created_ts < ?");
     params.push(opts.createdTsBefore);
+  }
+  if (opts.filterWhere) {
+    conditions.push(`(${opts.filterWhere})`);
+    params.push(...(opts.filterParams || []));
   }
   if (opts.readableByUserId !== undefined) {
     conditions.push("(visibility IN ('PUBLIC', 'PROTECTED') OR creator_id = ?)");

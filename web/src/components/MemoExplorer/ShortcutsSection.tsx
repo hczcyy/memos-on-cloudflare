@@ -18,7 +18,8 @@ const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)$/u;
 // Format: users/{username}/shortcuts/{shortcut}
 const getShortcutId = (name: string): string => {
   const parts = name.split("/");
-  return parts.length === 4 ? parts[3] : "";
+  const index = parts.lastIndexOf("shortcuts");
+  return index >= 0 ? parts[index + 1] || "" : "";
 };
 
 function ShortcutsSection() {

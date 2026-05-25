@@ -11,6 +11,7 @@ import { exchangeOAuthCode } from "../auth/oauth";
 import { createErrorBody } from "../error";
 import { buildIdentityProviderName, extractIdentityProviderUid } from "../idp";
 import { deleteCachedKeys, getCachedJson, putCachedJson } from "../cache";
+import { getWebhookUrlValidationError, normalizeWebhookUrl } from "../webhook";
 
 type UserApp = { Bindings: Env; Variables: { user: UserPayload } };
 
@@ -701,12 +702,13 @@ userRoutes.post("/:username/webhooks", authRequired, async (c) => {
   }
 
   const body = await c.req.json<{ url?: string; displayName?: string }>();
-  if (!body.url) return c.json({ error: "url is required" }, 400);
+  const urlError = getWebhookUrlValidationError(body.url);
+  if (urlError) return c.json({ error: urlError }, 400);
 
   const webhook = await webhookDB.createWebhook(c.env.DB, {
     creatorId: user.id,
-    url: body.url,
-    displayName: body.displayName || "",
+    url: normalizeWebhookUrl(body.url)!,
+    displayName: body.displayName?.trim() || "",
   });
   return c.json(formatWebhook(webhook, username), 201);
 });
@@ -728,8 +730,12 @@ userRoutes.patch("/:username/webhooks/:webhookId", authRequired, async (c) => {
 
   const body = await c.req.json<{ url?: string; displayName?: string }>();
   const updateData: Partial<{ url: string; display_name: string }> = {};
-  if (body.url !== undefined) updateData.url = body.url;
-  if (body.displayName !== undefined) updateData.display_name = body.displayName;
+  if (body.url !== undefined) {
+    const urlError = getWebhookUrlValidationError(body.url);
+    if (urlError) return c.json({ error: urlError }, 400);
+    updateData.url = normalizeWebhookUrl(body.url)!;
+  }
+  if (body.displayName !== undefined) updateData.display_name = body.displayName.trim();
 
   const updated = await webhookDB.updateWebhook(c.env.DB, webhookId, updateData);
   if (!updated) return c.json({ error: "Update failed" }, 500);

@@ -642,6 +642,8 @@ export const identityProviderServiceClient = {
 
 function extractId(name: string, prefix: string): string {
   if (name.startsWith(prefix)) return name.slice(prefix.length);
+  const index = name.lastIndexOf(`/${prefix}`);
+  if (index >= 0) return name.slice(index + prefix.length + 1);
   return name;
 }
 
