@@ -693,10 +693,11 @@ function isoToTimestamp(iso: string | undefined): any {
 
 function normalizeMemo(data: any): any {
   if (!data) return data;
+  const state = data.state ?? data.rowStatus;
   return {
     ...data,
     name: data.name || `memos/${data.id || data.uid}`,
-    state: data.rowStatus === "ARCHIVED" ? 2 : 1,
+    state: state === "ARCHIVED" || state === 2 ? 2 : 1,
     creator: data.creator || `users/${data.creatorId}`,
     createTime: isoToTimestamp(data.createTime),
     updateTime: isoToTimestamp(data.updateTime),
