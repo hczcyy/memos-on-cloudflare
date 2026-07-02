@@ -82,9 +82,11 @@ export const useMemoActionHandlers = ({ memo, onEdit, setDeleteDialogOpen }: Use
 
   const handleCopyLink = useCallback(() => {
     let host = profile.instanceUrl;
-    if (host === "") {
+    if (!host) {
       host = window.location.origin;
     }
+    // 去除尾部斜杠，避免双斜杠
+    host = host.replace(/\/+$/, "");
     copy(`${host}/${memo.name}`);
     toast.success(t("message.succeed-copy-link"));
   }, [memo.name, t, profile.instanceUrl]);
