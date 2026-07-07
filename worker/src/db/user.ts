@@ -29,6 +29,62 @@ export async function findUserById(
   return db.prepare("SELECT * FROM user WHERE id = ?").bind(id).first<UserRow>();
 }
 
+function createPlaceholders(count: number) {
+  return Array.from({ length: count }, () => "?").join(", ");
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+export async function findUsersByUsernames(
+  db: D1Database,
+  usernames: string[]
+): Promise<UserRow[]> {
+  const uniqueUsernames = [...new Set(usernames)].filter(Boolean);
+  if (uniqueUsernames.length === 0) {
+    return [];
+  }
+
+  const usersByUsername = new Map<string, UserRow>();
+  for (const chunk of chunkValues(uniqueUsernames, 900)) {
+    const { results } = await db.prepare(
+      `SELECT * FROM user WHERE username IN (${createPlaceholders(chunk.length)})`
+    ).bind(...chunk).all<UserRow>();
+    for (const user of results) {
+      usersByUsername.set(user.username, user);
+    }
+  }
+
+  return usernames.map((username) => usersByUsername.get(username)).filter((user): user is UserRow => Boolean(user));
+}
+
+export async function findUsersByIds(
+  db: D1Database,
+  ids: number[]
+): Promise<UserRow[]> {
+  const uniqueIds = [...new Set(ids)].filter((id) => Number.isFinite(id));
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const usersById = new Map<number, UserRow>();
+  for (const chunk of chunkValues(uniqueIds, 900)) {
+    const { results } = await db.prepare(
+      `SELECT * FROM user WHERE id IN (${createPlaceholders(chunk.length)})`
+    ).bind(...chunk).all<UserRow>();
+    for (const user of results) {
+      usersById.set(user.id, user);
+    }
+  }
+
+  return uniqueIds.map((id) => usersById.get(id)).filter((user): user is UserRow => Boolean(user));
+}
+
 export async function countUsers(db: D1Database): Promise<number> {
   const result = await db
     .prepare("SELECT COUNT(*) as count FROM user")

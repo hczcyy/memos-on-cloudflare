@@ -207,18 +207,17 @@ async function getMemoAttachments(db: D1Database, memoId: number, memoUid: strin
 
 async function getMemoRelations(db: D1Database, memoId: number, user?: UserPayload) {
   const relations = await relationDB.listRelations(db, memoId);
-  const resolved = await Promise.all(
-    relations.map(async (relation) => {
-      const memo = await memoDB.getMemoById(db, relation.memo_id);
-      const relatedMemo = await memoDB.getMemoById(db, relation.related_memo_id);
-      const formattedRelation = {
-        memo: formatMemoRelationSnippet(memo || undefined, user),
-        relatedMemo: formatMemoRelationSnippet(relatedMemo || undefined, user),
-        type: relation.type,
-      };
-      return formattedRelation.memo && formattedRelation.relatedMemo ? formattedRelation : undefined;
-    }),
-  );
+  const relationMemoMap = await getMemoSnippetMapByIds(db, relations.flatMap((relation) => [relation.memo_id, relation.related_memo_id]));
+  const resolved = relations.map((relation) => {
+    const memo = relationMemoMap.get(relation.memo_id);
+    const relatedMemo = relationMemoMap.get(relation.related_memo_id);
+    const formattedRelation = {
+      memo: formatMemoRelationSnippet(memo, user),
+      relatedMemo: formatMemoRelationSnippet(relatedMemo, user),
+      type: relation.type,
+    };
+    return formattedRelation.memo && formattedRelation.relatedMemo ? formattedRelation : undefined;
+  });
   return resolved.filter((relation) => relation !== undefined);
 }
 
@@ -319,9 +318,31 @@ async function listReactionRowsByContentIds(db: D1Database, contentIds: string[]
 async function getMemoSnippetMapByIds(db: D1Database, memoIds: number[]) {
   const memoMap = new Map<number, Pick<memoDB.MemoRow, "uid" | "content" | "visibility" | "creator_id">>();
   const uniqueIds = [...new Set(memoIds)];
+  if (uniqueIds.length === 0) {
+    return memoMap;
+  }
+
   for (const chunk of chunkValues(uniqueIds, 900)) {
     const { results } = await db.prepare(
       `SELECT id, uid, content, visibility, creator_id FROM memo WHERE id IN (${createPlaceholders(chunk.length)})`
+    ).bind(...chunk).all<memoDB.MemoRow>();
+    for (const memo of results) {
+      memoMap.set(memo.id, memo);
+    }
+  }
+  return memoMap;
+}
+
+async function getMemoRowMapByIds(db: D1Database, memoIds: number[]) {
+  const memoMap = new Map<number, memoDB.MemoRow>();
+  const uniqueIds = [...new Set(memoIds)].filter((id) => Number.isFinite(id));
+  if (uniqueIds.length === 0) {
+    return memoMap;
+  }
+
+  for (const chunk of chunkValues(uniqueIds, 900)) {
+    const { results } = await db.prepare(
+      `SELECT * FROM memo WHERE id IN (${createPlaceholders(chunk.length)})`
     ).bind(...chunk).all<memoDB.MemoRow>();
     for (const memo of results) {
       memoMap.set(memo.id, memo);
@@ -500,16 +521,49 @@ async function getLinkMetadata(env: Env, url: string, includeUrl = false): Promi
 async function resolveAttachmentIds(db: D1Database, user: UserPayload, references: unknown[]): Promise<number[]> {
   const ids: number[] = [];
   const seen = new Set<number>();
+  const tokens: string[] = [];
 
   for (const referenceValue of references) {
     const reference = getAttachmentReference(referenceValue);
     if (!reference) continue;
 
     const token = reference.startsWith("attachments/") ? reference.slice("attachments/".length) : reference;
-    const row = await db.prepare("SELECT id, creator_id FROM attachment WHERE uid = ? OR id = ?")
-      .bind(token, Number(token) || 0)
-      .first<{ id: number; creator_id: number }>();
+    tokens.push(token);
+  }
 
+  const uniqueTokens = [...new Set(tokens)];
+  if (uniqueTokens.length === 0) {
+    return ids;
+  }
+
+  const rowsByUid = new Map<string, { id: number; uid: string; creator_id: number }>();
+  const rowsById = new Map<number, { id: number; uid: string; creator_id: number }>();
+
+  for (const tokenChunk of chunkValues(uniqueTokens, 450)) {
+    const numericIds = tokenChunk
+      .map((token) => Number(token))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const uidPlaceholders = createPlaceholders(tokenChunk.length);
+    const conditions = [`uid IN (${uidPlaceholders})`];
+    const params: Array<string | number> = [...tokenChunk];
+
+    if (numericIds.length > 0) {
+      conditions.push(`id IN (${createPlaceholders(numericIds.length)})`);
+      params.push(...numericIds);
+    }
+
+    const { results } = await db.prepare(
+      `SELECT id, uid, creator_id FROM attachment WHERE ${conditions.join(" OR ")}`
+    ).bind(...params).all<{ id: number; uid: string; creator_id: number }>();
+
+    for (const row of results) {
+      rowsByUid.set(row.uid, row);
+      rowsById.set(row.id, row);
+    }
+  }
+
+  for (const token of tokens) {
+    const row = rowsByUid.get(token) || rowsById.get(Number(token));
     if (!row) continue;
     if (row.creator_id !== user.id && user.role !== "ADMIN") continue;
     if (!seen.has(row.id)) {
@@ -525,11 +579,16 @@ async function setMemoAttachments(db: D1Database, memoId: number, user: UserPayl
   const attachmentIds = await resolveAttachmentIds(db, user, references);
 
   await db.prepare("UPDATE attachment SET memo_id = NULL WHERE memo_id = ?").bind(memoId).run();
-  for (const attId of attachmentIds) {
+  if (attachmentIds.length === 0) {
+    return;
+  }
+
+  for (const chunk of chunkValues(attachmentIds, 900)) {
+    const placeholders = createPlaceholders(chunk.length);
     if (user.role === "ADMIN") {
-      await db.prepare("UPDATE attachment SET memo_id = ? WHERE id = ?").bind(memoId, attId).run();
+      await db.prepare(`UPDATE attachment SET memo_id = ? WHERE id IN (${placeholders})`).bind(memoId, ...chunk).run();
     } else {
-      await db.prepare("UPDATE attachment SET memo_id = ? WHERE id = ? AND creator_id = ?").bind(memoId, attId, user.id).run();
+      await db.prepare(`UPDATE attachment SET memo_id = ? WHERE id IN (${placeholders}) AND creator_id = ?`).bind(memoId, ...chunk, user.id).run();
     }
   }
 }
@@ -773,10 +832,12 @@ memoRoutes.get("/:id/relations", authOptional, async (c) => {
   }
 
   const relations = await relationDB.listRelations(c.env.DB, memo.id);
+  const otherMemoIds = relations.map((relation) => relation.memo_id === memo.id ? relation.related_memo_id : relation.memo_id);
+  const otherMemoMap = await getMemoSnippetMapByIds(c.env.DB, otherMemoIds);
   const visibleRelations: relationDB.RelationRow[] = [];
   for (const relation of relations) {
     const otherMemoId = relation.memo_id === memo.id ? relation.related_memo_id : relation.memo_id;
-    const otherMemo = await memoDB.getMemoById(c.env.DB, otherMemoId);
+    const otherMemo = otherMemoMap.get(otherMemoId);
     if (!otherMemo || !getMemoReadDeniedStatus(otherMemo, user)) {
       visibleRelations.push(relation);
     }
@@ -875,10 +936,10 @@ memoRoutes.get("/:id/comments", authOptional, async (c) => {
 
   const relations = await relationDB.listRelations(c.env.DB, memo.id);
   const commentRelations = relations.filter((r) => r.type === "COMMENT");
+  const commentMap = await getMemoRowMapByIds(c.env.DB, commentRelations.map((rel) => rel.related_memo_id));
   const comments: memoDB.MemoRow[] = [];
-
   for (const rel of commentRelations) {
-    const comment = await memoDB.getMemoById(c.env.DB, rel.related_memo_id);
+    const comment = commentMap.get(rel.related_memo_id);
     if (comment && !getMemoReadDeniedStatus(comment, user)) comments.push(comment);
   }
 

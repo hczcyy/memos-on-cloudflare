@@ -103,11 +103,7 @@ userRoutes.post("/:batchGet", async (c) => {
   if (action !== "batchGet") return c.notFound();
 
   const body = await c.req.json<{ usernames: string[] }>();
-  const users: userDB.UserRow[] = [];
-  for (const username of body.usernames || []) {
-    const user = await userDB.findUserByUsername(c.env.DB, username);
-    if (user && user.row_status === "NORMAL") users.push(user);
-  }
+  const users = (await userDB.findUsersByUsernames(c.env.DB, body.usernames || [])).filter((user) => user.row_status === "NORMAL");
   return c.json({ users: users.map((user) => formatUser(user)) });
 });
 
@@ -174,29 +170,32 @@ userRoutes.get("/:action", authOptional, async (c) => {
     }
 
     const users = await userDB.listUsers(c.env.DB, { rowStatus: "NORMAL" });
-    const stats = [];
-    for (const user of users) {
-      const { results: memos } = await c.env.DB.prepare(
-        "SELECT payload FROM memo WHERE creator_id = ? AND row_status = 'NORMAL' AND visibility = 'PUBLIC'"
-      ).bind(user.id).all<{ payload: string }>();
+    const { results: memos } = await c.env.DB.prepare(
+      "SELECT creator_id, payload FROM memo WHERE row_status = 'NORMAL' AND visibility = 'PUBLIC'"
+    ).all<{ creator_id: number; payload: string }>();
 
-      const tagCount: Record<string, number> = {};
-      for (const m of memos) {
-        const payload = JSON.parse(m.payload || "{}");
-        if (payload.tags) {
-          for (const tag of payload.tags) {
-            tagCount[tag] = (tagCount[tag] || 0) + 1;
-          }
+    const memoStatsByUserId = new Map<number, { memoCount: number; tagCount: Record<string, number> }>();
+    for (const memo of memos) {
+      const stats = memoStatsByUserId.get(memo.creator_id) || { memoCount: 0, tagCount: {} };
+      stats.memoCount += 1;
+      const payload = JSON.parse(memo.payload || "{}");
+      if (payload.tags) {
+        for (const tag of payload.tags) {
+          stats.tagCount[tag] = (stats.tagCount[tag] || 0) + 1;
         }
       }
+      memoStatsByUserId.set(memo.creator_id, stats);
+    }
 
-      stats.push({
+    const stats = users.map((user) => {
+      const memoStats = memoStatsByUserId.get(user.id) || { memoCount: 0, tagCount: {} };
+      return {
         name: `users/${user.username}/stats`,
         username: user.username,
-        memoCount: memos.length,
-        tagCount,
-      });
-    }
+        memoCount: memoStats.memoCount,
+        tagCount: memoStats.tagCount,
+      };
+    });
     const response = { stats };
     await putCachedJson(c.env.CACHE, "user:stats:all:public", response, 60);
     return c.json(response);
@@ -598,10 +597,13 @@ userRoutes.get("/:username/notifications", authRequired, async (c) => {
 
   const senderIds = [...new Set((results || []).map((r) => r.sender_id))];
   const senderMap = new Map<number, { username: string; nickname: string; avatar_url: string }>();
-  for (const id of senderIds) {
-    const sender = await c.env.DB.prepare("SELECT username, nickname, avatar_url FROM user WHERE id = ?")
-      .bind(id).first<{ username: string; nickname: string; avatar_url: string }>();
-    if (sender) senderMap.set(id, sender);
+  const senders = await userDB.findUsersByIds(c.env.DB, senderIds);
+  for (const sender of senders) {
+    senderMap.set(sender.id, {
+      username: sender.username,
+      nickname: sender.nickname,
+      avatar_url: sender.avatar_url,
+    });
   }
 
   const notifications = (results || []).map((row) => {

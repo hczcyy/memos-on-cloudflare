@@ -24,9 +24,9 @@ bucket_name = "cfmemos"
 # Optional KV cache. Create a namespace with:
 #   wrangler kv namespace create cfmemos-cache
 # Then uncomment this block and replace the id.
-# [[kv_namespaces]]
-# binding = "CACHE"
-# id = "replace-with-your-kv-namespace-id"
+[[kv_namespaces]]
+binding = "CACHE"
+id = "3b729feb97144c19b86bcde13be655e7"
 
 [ai]
 binding = "AI"

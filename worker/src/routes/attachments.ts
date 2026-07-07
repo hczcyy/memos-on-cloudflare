@@ -81,6 +81,48 @@ async function findAttachmentByToken(db: D1Database, token: string): Promise<Att
     .first<AttachmentRow>();
 }
 
+function createPlaceholders(count: number) {
+  return Array.from({ length: count }, () => "?").join(", ");
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function findAttachmentsByTokens(db: D1Database, tokens: string[]): Promise<AttachmentRow[]> {
+  const normalizedTokens = [...new Set(tokens.map((token) => token.startsWith("attachments/") ? token.slice("attachments/".length) : token).filter(Boolean))];
+  const attachmentsById = new Map<number, AttachmentRow>();
+  if (normalizedTokens.length === 0) {
+    return [];
+  }
+
+  for (const tokenChunk of chunkValues(normalizedTokens, 450)) {
+    const numericIds = tokenChunk
+      .map((token) => Number(token))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const conditions = [`uid IN (${createPlaceholders(tokenChunk.length)})`];
+    const params: Array<string | number> = [...tokenChunk];
+
+    if (numericIds.length > 0) {
+      conditions.push(`id IN (${createPlaceholders(numericIds.length)})`);
+      params.push(...numericIds);
+    }
+
+    const { results } = await db.prepare(
+      `SELECT * FROM attachment WHERE ${conditions.join(" OR ")}`
+    ).bind(...params).all<AttachmentRow>();
+    for (const attachment of results) {
+      attachmentsById.set(attachment.id, attachment);
+    }
+  }
+
+  return [...attachmentsById.values()];
+}
+
 async function getAttachmentReadDeniedStatus(db: D1Database, att: AttachmentRow, user: UserPayload | undefined): Promise<401 | 403 | undefined> {
   if (!att.memo_id) {
     return user && (att.creator_id === user.id || user.role === "ADMIN") ? undefined : 403;
@@ -305,12 +347,16 @@ attachmentRoutes.post("/:action", authRequired, async (c) => {
   const user = c.get("user");
   const body = await c.req.json<{ ids?: Array<number | string>; names?: string[] }>();
 
-  for (const reference of body.names || body.ids || []) {
-    const att = await findAttachmentByToken(c.env.DB, String(reference));
-    if (att && (att.creator_id === user.id || user.role === "ADMIN")) {
-      if (att.reference) await c.env.BUCKET.delete(att.reference);
-      await c.env.DB.prepare("DELETE FROM attachment WHERE id = ?").bind(att.id).run();
-    }
+  const attachments = await findAttachmentsByTokens(c.env.DB, (body.names || body.ids || []).map(String));
+  const deletableAttachments = attachments.filter((att) => att.creator_id === user.id || user.role === "ADMIN");
+
+  await Promise.all(deletableAttachments.map((att) => att.reference ? c.env.BUCKET.delete(att.reference) : Promise.resolve()));
+
+  const attachmentIds = deletableAttachments.map((att) => att.id);
+  for (const chunk of chunkValues(attachmentIds, 900)) {
+    await c.env.DB.prepare(
+      `DELETE FROM attachment WHERE id IN (${createPlaceholders(chunk.length)})`
+    ).bind(...chunk).run();
   }
 
   await deleteCachedKeys(c.env.CACHE, ["instance:stats"]);

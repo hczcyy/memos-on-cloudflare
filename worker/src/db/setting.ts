@@ -111,14 +111,20 @@ export async function getInstanceSetting(
   db: D1Database,
   name: string
 ): Promise<SystemSettingRow | null> {
-  for (const candidate of getInstanceSettingStorageNames(name)) {
-    const setting = await getSystemSetting(db, candidate);
-    if (setting) {
-      return {
-        ...setting,
-        name: normalizeInstanceSettingName(setting.name),
-      };
-    }
+  const candidates = getInstanceSettingStorageNames(name);
+  const placeholders = candidates.map(() => "?").join(", ");
+  const { results } = await db
+    .prepare(`SELECT * FROM system_setting WHERE name IN (${placeholders})`)
+    .bind(...candidates)
+    .all<SystemSettingRow>();
+
+  for (const candidate of candidates) {
+    const setting = results.find((row) => row.name === candidate);
+    if (!setting) continue;
+    return {
+      ...setting,
+      name: normalizeInstanceSettingName(setting.name),
+    };
   }
   return null;
 }
