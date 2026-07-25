@@ -25,8 +25,8 @@ bucket_name = "cfmemos"
 #   wrangler kv namespace create cfmemos-cache
 # Then uncomment this block and replace the id.
 [[kv_namespaces]]
-binding = "CACHE"
-id = "3b729feb97144c19b86bcde13be655e7"
+binding = "mrhe"
+id = "6aabe97e92ee4c86ac8d3ec13c0f2e2e"
 
 [ai]
 binding = "AI"
