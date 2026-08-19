@@ -101,7 +101,6 @@ export const SETTINGS_SECTIONS: SettingSectionDefinition[] = [
     labelKey: "setting.storage.label",
     icon: Settings2Icon,
     component: StorageSection,
-    preloadSettingKeys: [InstanceSetting_Key.STORAGE],
   },
   {
     key: "tags",

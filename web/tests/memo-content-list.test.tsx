@@ -34,7 +34,7 @@ describe("memo content lists", () => {
     expect(html).toContain('<li class="mt-0.5 leading-6">milk</li>');
     expect(html).not.toContain('<li class="mt-0.5 leading-6">\n<p>milk</p>');
     expect(html).toContain(TASK_LIST_ITEM_CLASS);
-    expect(html).toContain("grid grid-cols-[auto_1fr] items-start gap-x-2");
+    expect(html).toContain("grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2");
     expect(html).not.toMatch(/<li class="[^"]*task-list-item[^"]*"><p\b/);
   });
 
@@ -49,8 +49,8 @@ describe("memo content lists", () => {
   it("keeps nested task lists on their own row", () => {
     const html = renderListContent("- [ ] asdas\n  - [ ] zzzz");
 
-    expect(html).toContain("grid grid-cols-[auto_1fr] items-start gap-x-2");
-    expect(html).toContain("[&amp;&gt;ul]:col-start-2");
+    expect(html).toContain("grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2");
+    expect(html).toMatch(/<div class="[^"]*overflow-wrap:anywhere[^"]*"> asdas\s*<ul\b/);
     expect(html).not.toContain("[&amp;_ul.contains-task-list]:ml-6");
     expect(html).toContain("zzzz");
   });
@@ -58,10 +58,19 @@ describe("memo content lists", () => {
   it("keeps loose task list paragraphs while aligning the first line", () => {
     const html = renderListContent("- [ ] plan\n\n  keep details\n\n- [ ] zzzz");
 
-    expect(html).toMatch(/<li class="[^"]*task-list-item[^"]*">\s*<p>/);
-    expect(html).toContain("[&amp;&gt;p:first-child]:contents");
-    expect(html).toContain("[&amp;&gt;p:not(:first-child)]:col-start-2");
+    expect(html).toMatch(/<li class="[^"]*task-list-item[^"]*"><input[^>]*><div[^>]*>\s*<p> plan<\/p>/);
     expect(html).toContain("<p>keep details</p>");
     expect(html).toContain("zzzz");
+  });
+
+  it("allows long task links to shrink and wrap inside memo cards", () => {
+    const url = "https://example.com/a/very/long/path/that/should/wrap/instead/of/expanding/the/memo/card";
+    const html = renderListContent(`- [ ] [${url}](${url})`);
+
+    expect(html).toContain("min-w-0");
+    expect(html).toContain("grid-cols-[auto_minmax(0,1fr)]");
+    expect(html).toContain("[overflow-wrap:anywhere]");
+    expect(html).toMatch(/<input[^>]*><div class="[^"]*overflow-wrap:anywhere[^"]*">/);
+    expect(html).toContain(url);
   });
 });
