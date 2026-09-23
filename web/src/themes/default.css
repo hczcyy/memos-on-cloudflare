@@ -1,44 +1,45 @@
 :root {
-  --background: oklch(0.9818 0.0054 95.0986);
-  --foreground: oklch(0.2438 0.0269 95.7226);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.1908 0.002 106.5859);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2671 0.0196 98.939);
-  --primary: oklch(0.45 0.08 250);
-  --primary-foreground: oklch(0.9818 0.0054 95.0986);
-  --secondary: oklch(0.9245 0.0138 92.9892);
-  --secondary-foreground: oklch(0.4334 0.0177 98.6048);
-  --muted: oklch(0.9341 0.0153 90.239);
-  --muted-foreground: oklch(0.5559 0.0075 97.4233);
-  --accent: oklch(0.9245 0.0138 92.9892);
-  --accent-foreground: oklch(0.2671 0.0196 98.939);
-  --destructive: oklch(0.5 0.12 25);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.8847 0.0069 97.3627);
-  --input: oklch(0.7621 0.0156 98.3528);
-  --ring: oklch(0.45 0.08 250);
-  --sidebar: oklch(0.9663 0.008 98.8792);
-  --sidebar-foreground: oklch(0.359 0.0051 106.6524);
-  --sidebar-accent: oklch(0.9245 0.0138 92.9892);
-  --sidebar-accent-foreground: oklch(0.325 0 0);
+  --background: oklch(0.97 0.012 250);
+  --foreground: oklch(0.24 0.03 255);
+  --card: oklch(0.99 0.006 250);
+  --card-foreground: oklch(0.22 0.025 255);
+  --popover: oklch(0.99 0.006 250);
+  --popover-foreground: oklch(0.26 0.03 255);
+  --primary: oklch(0.58 0.11 250);              /* #437fc7 */
+  --primary-foreground: oklch(0.98 0.006 250);
+  --secondary: oklch(0.92 0.025 250);
+  --secondary-foreground: oklch(0.40 0.04 255);
+  --muted: oklch(0.93 0.02 250);
+  --muted-foreground: oklch(0.54 0.03 255);
+  --accent: oklch(0.76 0.10 245);               /* #6DAFFE */
+  --accent-foreground: oklch(0.22 0.025 255);
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: oklch(0.99 0.006 250);
+  --border: oklch(0.87 0.025 250);
+  --input: oklch(0.80 0.03 250);
+  --ring: oklch(0.58 0.11 250);                 /* 与 primary 一致 */
+  --sidebar: oklch(0.955 0.015 250);
+  --sidebar-foreground: oklch(0.33 0.03 255);
+  --sidebar-accent: oklch(0.48 0.10 252);       /* #3568a8 浅化版 */
+  --sidebar-accent-foreground: oklch(0.99 0.006 250);
+
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --radius: 0.5rem;
-  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
-  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
-  --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
-  --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+  --shadow-xs: 0 1px 3px 0px hsl(220 40% 20% / 0.05);
+  --shadow-sm: 0 1px 3px 0px hsl(220 40% 20% / 0.10), 0 1px 2px -1px hsl(220 40% 20% / 0.10);
+  --shadow:    0 1px 3px 0px hsl(220 40% 20% / 0.10), 0 1px 2px -1px hsl(220 40% 20% / 0.10);
+  --shadow-md: 0 1px 3px 0px hsl(220 40% 20% / 0.10), 0 2px 4px -1px hsl(220 40% 20% / 0.10);
+  --shadow-lg: 0 1px 3px 0px hsl(220 40% 20% / 0.10), 0 4px 6px -1px hsl(220 40% 20% / 0.10);
+  --shadow-xl: 0 1px 3px 0px hsl(220 40% 20% / 0.10), 0 8px 10px -1px hsl(220 40% 20% / 0.10);
+  --shadow-2xl: 0 1px 3px 0px hsl(220 40% 20% / 0.25);
 }
 
-/* Tailwind v4 token mappings — compiled once at build time, shared by all themes.
-   Dynamic theme files only need to override :root variables; this block covers all of them. */
+/* Tailwind v4 token mappings — 保持不变即可 */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
