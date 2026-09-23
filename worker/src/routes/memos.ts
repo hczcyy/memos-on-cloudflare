@@ -236,7 +236,7 @@ async function resolveUsernamesByIds(db: D1Database, ids: number[]): Promise<Map
   const usernameMap = new Map<number, string>();
   if (uniqueIds.length === 0) return usernameMap;
 
-  for (const chunk of chunkValues(uniqueIds, 900)) {
+  for (const chunk of chunkValues(uniqueIds, 90)) {
     const { results } = await db.prepare(
       `SELECT id, username FROM user WHERE id IN (${createPlaceholders(chunk.length)})`
     ).bind(...chunk).all<{ id: number; username: string }>();
@@ -283,7 +283,7 @@ async function resolveCreatorUsernames(db: D1Database, memos: memoDB.MemoRow[]):
 
 async function listAttachmentRowsByMemoIds(db: D1Database, memoIds: number[]) {
   const rows: any[] = [];
-  for (const chunk of chunkValues(memoIds, 900)) {
+  for (const chunk of chunkValues(memoIds, 90)) {
     const { results } = await db.prepare(
       `SELECT * FROM attachment WHERE memo_id IN (${createPlaceholders(chunk.length)}) ORDER BY memo_id ASC, created_ts ASC`
     ).bind(...chunk).all<any>();
@@ -294,7 +294,7 @@ async function listAttachmentRowsByMemoIds(db: D1Database, memoIds: number[]) {
 
 async function listRelationRowsByMemoIds(db: D1Database, memoIds: number[]) {
   const rows: relationDB.RelationRow[] = [];
-  for (const chunk of chunkValues(memoIds, 450)) {
+  for (const chunk of chunkValues(memoIds, 45)) {
     const placeholders = createPlaceholders(chunk.length);
     const { results } = await db.prepare(
       `SELECT * FROM memo_relation WHERE memo_id IN (${placeholders}) OR related_memo_id IN (${placeholders})`
@@ -306,7 +306,7 @@ async function listRelationRowsByMemoIds(db: D1Database, memoIds: number[]) {
 
 async function listReactionRowsByContentIds(db: D1Database, contentIds: string[]) {
   const rows: reactionDB.ReactionRow[] = [];
-  for (const chunk of chunkValues(contentIds, 900)) {
+  for (const chunk of chunkValues(contentIds, 90)) {
     const { results } = await db.prepare(
       `SELECT * FROM reaction WHERE content_id IN (${createPlaceholders(chunk.length)}) ORDER BY content_id ASC, created_ts ASC`
     ).bind(...chunk).all<reactionDB.ReactionRow>();
@@ -322,7 +322,7 @@ async function getMemoSnippetMapByIds(db: D1Database, memoIds: number[]) {
     return memoMap;
   }
 
-  for (const chunk of chunkValues(uniqueIds, 900)) {
+  for (const chunk of chunkValues(uniqueIds, 90)) {
     const { results } = await db.prepare(
       `SELECT id, uid, content, visibility, creator_id FROM memo WHERE id IN (${createPlaceholders(chunk.length)})`
     ).bind(...chunk).all<memoDB.MemoRow>();
@@ -340,7 +340,7 @@ async function getMemoRowMapByIds(db: D1Database, memoIds: number[]) {
     return memoMap;
   }
 
-  for (const chunk of chunkValues(uniqueIds, 900)) {
+  for (const chunk of chunkValues(uniqueIds, 90)) {
     const { results } = await db.prepare(
       `SELECT * FROM memo WHERE id IN (${createPlaceholders(chunk.length)})`
     ).bind(...chunk).all<memoDB.MemoRow>();
@@ -539,7 +539,7 @@ async function resolveAttachmentIds(db: D1Database, user: UserPayload, reference
   const rowsByUid = new Map<string, { id: number; uid: string; creator_id: number }>();
   const rowsById = new Map<number, { id: number; uid: string; creator_id: number }>();
 
-  for (const tokenChunk of chunkValues(uniqueTokens, 450)) {
+  for (const tokenChunk of chunkValues(uniqueTokens, 45)) {
     const numericIds = tokenChunk
       .map((token) => Number(token))
       .filter((id) => Number.isInteger(id) && id > 0);
@@ -583,7 +583,7 @@ async function setMemoAttachments(db: D1Database, memoId: number, user: UserPayl
     return;
   }
 
-  for (const chunk of chunkValues(attachmentIds, 900)) {
+  for (const chunk of chunkValues(attachmentIds, 88)) {
     const placeholders = createPlaceholders(chunk.length);
     if (user.role === "ADMIN") {
       await db.prepare(`UPDATE attachment SET memo_id = ? WHERE id IN (${placeholders})`).bind(memoId, ...chunk).run();
