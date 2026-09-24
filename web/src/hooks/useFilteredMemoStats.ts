@@ -1,11 +1,11 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import dayjs from "dayjs";
 import { countBy } from "lodash-es";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { MemoExplorerContext } from "@/components/MemoExplorer";
 import { type MemoTimeBasis, useView } from "@/contexts/ViewContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { useMemos } from "@/hooks/useMemoQueries";
+import { useInfiniteMemos, useMemos } from "@/hooks/useMemoQueries";
 import { useUserStats } from "@/hooks/useUserQueries";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
 import type { StatisticsData } from "@/types/statistics";
@@ -41,8 +41,33 @@ export const useFilteredMemoStats = (options: UseFilteredMemoStatsOptions = {}):
   // memos are always excluded regardless of backend version.
   // other contexts: fetch with default params for the fallback memo-based path.
   const exploreVisibilityFilter = currentUser != null ? 'visibility in ["PUBLIC", "PROTECTED"]' : 'visibility in ["PUBLIC"]';
-  const memoQueryParams = context === "explore" ? { filter: exploreVisibilityFilter, pageSize: 1000 } : {};
-  const { data: memosResponse, isLoading: isLoadingMemos } = useMemos(memoQueryParams);
+
+  // explore 用分页循环拉全量（每页 100，避免 D1 参数上限）
+  const {
+    data: infiniteMemoData,
+    isLoading: isLoadingInfinite,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteMemos({ filter: exploreVisibilityFilter, pageSize: 100 }, { enabled: context === "explore" });
+
+  // 非 explore 的兜底路径保留原样
+  const { data: fallbackResponse, isLoading: isLoadingFallback } = useMemos(context !== "explore" ? {} : {});
+
+  // 自动把所有页拉完
+  useEffect(() => {
+    if (context === "explore" && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [context, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // 合并所有页为一个 ListMemosResponse
+  const memosResponse =
+    context === "explore"
+      ? { memos: infiniteMemoData?.pages.flatMap((page) => page.memos) ?? [] }
+      : fallbackResponse;
+
+  const isLoadingMemos = context === "explore" ? isLoadingInfinite : isLoadingFallback;
 
   const data = useMemo(() => {
     const loading = isLoadingUserStats || isLoadingMemos;
