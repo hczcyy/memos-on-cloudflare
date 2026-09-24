@@ -646,7 +646,7 @@ memoRoutes.post("/", authRequired, async (c) => {
 // List memos
 memoRoutes.get("/", authOptional, async (c) => {
   const user = c.get("user");
-  const pageSize = Math.min(Number(c.req.query("pageSize")) || 50, 1000);
+  const pageSize = Math.min(Number(c.req.query("pageSize")) || 50, 100);
   const pageToken = c.req.query("pageToken");
   const filter = c.req.query("filter") || "";
   const orderBy = c.req.query("orderBy") || "";
